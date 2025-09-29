@@ -88,7 +88,6 @@ class SimplePetLoader:
         return data
 
     def load_spritesheet(self, image_data_b64, frame_width, frame_height, scale=1):
-        """ТОЧНАЯ КОПИЯ ВАШЕГО МЕТОДА"""
         # Декодируем из base64
         image_data = base64.b64decode(image_data_b64)
         img_stream = io.BytesIO(image_data)
@@ -107,7 +106,6 @@ class SimplePetLoader:
         return frames
 
     def load_all_animations(self, file_path):
-        """ТОЧНАЯ КОПИЯ ВАШЕГО МЕТОДА"""
         data = self.load_pet_file(file_path)
         
         animations_right = {}
@@ -154,26 +152,11 @@ class SimplePetLoader:
 """if __name__ == "__main__":
      # Компиляция
     compiler = SimplePetCompiler()
-    compiler.set_metadata("Анимации Dude Monster")
+    compiler.set_metadata("Анимации моего питомца")
     
-    compiler.add_animation("idle", "Assets/Dude_Monster/Dude_Monster_Idle_4.png", 32, 32, 2)
-    compiler.add_animation("run", "Assets/Dude_Monster/Dude_Monster_Run_6.png", 32, 32, 2)
-    compiler.add_animation("jump", "Assets/Dude_Monster/Dude_Monster_Jump_8.png", 32, 32, 2)
+    compiler.add_animation("Анимация1", "Спрайтшит1.png", 32, 32, 2)
+    compiler.add_animation("Анимация2", "Спрайтшит2.png", 32, 32, 2)
+    compiler.add_animation("Анимация3", "Спрайтшит3.png", 32, 32, 2)
     
-    compiler.compile("dude_monster.pet")
-    
-    # Загрузка
-    loader = SimplePetLoader()
-    
-    # Проверка информации
-    loader.get_animation_info("pink_monster.pet")
-    
-    # Загрузка анимаций
-    try:
-        animations_right, animations_left = loader.load_all_animations("pink_monster.pet")
-        print(f"\n✅ Успешно загружено!")
-        print(f"Анимации: {list(animations_right.keys())}")
-        for name, frames in animations_right.items():
-            print(f"  {name}: {len(frames)} кадров, размер: {frames[0].get_size()}")
-    except Exception as e:
-        print(f"❌ Ошибка: {e}") """
+    compiler.compile("pet.pet")
+"""
