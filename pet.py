@@ -40,6 +40,7 @@ class PetManager:
 
         self.click_pos = None
         self.pets = []
+        self.all_pet_ids = []
         self.running = True
         self.show_debug = False
         self.menu_show = False
@@ -48,26 +49,25 @@ class PetManager:
 
     def add_pet(self, pet):
         self.pets.append(pet)
+        self.all_pet_ids.append(pet.id)
         
     def setup_tray(self):
 
         def exit_action(icon, item):
+            self.running = False
             for pet in self.pets:
                 pet.running = False
-            self.running = False
-
-            try:
-                if self.menu_window:
+            
+            pygame.quit()
+            
+            if hasattr(self, 'menu_window') and self.menu_window:
+                try:
+                    self.menu_window.quit()
                     self.menu_window.destroy()
-                if hasattr(self, 'menu_window') and self.menu_window:
-                    try:
-                        self.menu_window.after(0, self.menu_window.quit)
-                        self.menu_window.after(0, self.menu_window.destroy)
-                    except:
-                        pass
-            except:
-                pass  # Игнорируем ошибки если окно уже уничтожено
+                except:
+                    pass
             icon.stop()
+            os._exit(0)
             
         def debug_action(icon, item):
             self.show_debug = not self.show_debug
@@ -86,19 +86,19 @@ class PetManager:
         self.tray_thread.start()
 
     def show_menu(self):
-        """Показывает tkinter меню"""
-        try:
-            # Пробуем проверить существует ли окно
-            if self.menu_window and self.menu_window.winfo_exists():
-                self.menu_window.focus_force()
-            else:
-                # Создаем новое меню
-                pet_menu = PetMenu(self)
-                self.menu_window = pet_menu.root
-        except:
-            # Если произошла ошибка (окно уничтожено), создаем новое
-            pet_menu = PetMenu(self)
-            self.menu_window = pet_menu.root
+        if hasattr(self, 'menu_window') and self.menu_window and self.menu_window.winfo_exists():
+            self.menu_window.focus_force()
+            return
+        
+        # Закрываем старое окно если есть
+        if hasattr(self, '_pet_menu'):
+            try:
+                self._pet_menu.root.destroy()
+            except:
+                pass
+        
+        self._pet_menu = PetMenu(self)
+        self.menu_window = self._pet_menu.root
 
     def handle_selection(self, mouse_pos):
         clicked_pet = None
@@ -129,6 +129,7 @@ class PetManager:
         return pet_rect.collidepoint(point)
 
     def run(self):
+
         clock = pygame.time.Clock()
         while self.running:
             for event in pygame.event.get():
@@ -217,6 +218,7 @@ class DesktopPet:
         self.ui = {}
 
         self.pet_loader = SimplePetLoader()
+        self.id = self.pet_loader.get_pet_info(asset_file)["metadata"]['id']
         try:
             self.animations_right, self.animations_left = self.pet_loader.load_all_animations(asset_file)
         except:
@@ -289,9 +291,11 @@ class DesktopPet:
 class PetMenu:
     def __init__(self, pet_manager):
         self.pet_manager = pet_manager
+        self.pet_loader = SimplePetLoader()
         self.pet_manager.menu_show = True
 
         self.mypets_dir = "MyPets"
+        self.mypets_ids = self.get_mypets_ids()
         os.makedirs(self.mypets_dir, exist_ok=True)
         
         # Создаем главное окно
@@ -480,19 +484,22 @@ class PetMenu:
             filetypes=[("Pet files", "*.pet"), ("All files", "*.*")],
             initialdir="."  # Текущая директория
         )
-        
         if file_path:
+            id = self.pet_loader.get_pet_info(file_path)["metadata"]['id']
             try:
-                # Копируем файл в MyPets
-                copied_path = self.copy_to_mypets(file_path)
-                if copied_path:
-                    # Загружаем из скопированного файла
-                    new_pet = DesktopPet(asset_file=copied_path)
-                    self.pet_manager.add_pet(new_pet)
-                    self.update_pet_list()
-                    print(f"Успешно загружен питомец из: {file_path} (скопирован в MyPets)")
+                if id not in self.mypets_ids:
+                    # Копируем файл в MyPets
+                    copied_path = self.copy_to_mypets(file_path)
+                    if copied_path:
+                        # Загружаем из скопированного файла
+                        new_pet = DesktopPet(asset_file=copied_path)
+                        self.pet_manager.add_pet(new_pet)
+                        self.update_pet_list()
+                        print(f"Успешно загружен питомец из: {file_path} (скопирован в MyPets)")
+                    else:
+                        tk.messagebox.showerror("Ошибка", "Не удалось скопировать файл в MyPets")
                 else:
-                    tk.messagebox.showerror("Ошибка", "Не удалось скопировать файл в MyPets")
+                        tk.messagebox.showerror("Ошибка", "Питомец уже добавлен")
                     
             except Exception as e:
                 print(f"Ошибка загрузки файла {file_path}: {e}")
@@ -510,6 +517,13 @@ class PetMenu:
             print(f"Ошибка чтения папки MyPets: {e}")
         
         return pet_files
+
+    def get_mypets_ids(self):
+        mypets_ids = []
+        for file_path in os.listdir(self.mypets_dir):
+            id = self.pet_loader.get_pet_info(file_path)["metadata"]['id']
+            mypets_ids.append(id)
+        return mypets_ids
 
     def clear_all_pets(self):
         """Удаляет всех питомцев"""
@@ -588,9 +602,12 @@ class PetMenu:
         """Загружает питомца из папки MyPets"""
         try:
             new_pet = DesktopPet(asset_file=file_path)
-            self.pet_manager.add_pet(new_pet)
-            self.update_pet_list()
-            print(f"Успешно загружен питомец из MyPets: {os.path.basename(file_path)}")
+            if self.pet_loader.get_pet_info(file_path)["metadata"]['id'] not in self.pet_manager.all_pet_ids:
+                self.pet_manager.add_pet(new_pet)
+                self.update_pet_list()
+                print(f"Успешно загружен питомец из MyPets: {os.path.basename(file_path)}")
+            else:
+                    tk.messagebox.showerror("Ошибка", "Питомец уже добавлен")
         except Exception as e:
             print(f"Ошибка загрузки файла {file_path}: {e}")
             tk.messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")

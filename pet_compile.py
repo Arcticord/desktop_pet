@@ -5,6 +5,7 @@ import io
 import pygame
 from pygame.transform import flip
 import base64
+import uuid
 
 class SimplePetCompiler:
     def __init__(self):
@@ -19,6 +20,7 @@ class SimplePetCompiler:
         """Установка метаданных"""
         from datetime import datetime
         self.metadata.update({
+            "id": uuid.uuid4(),
             "created": datetime.now().isoformat(),
             "description": description
         })
@@ -130,10 +132,11 @@ class SimplePetLoader:
         
         return animations_right, animations_left
     
-    def get_animation_info(self, file_path):
+    def get_pet_info(self, file_path):
         """Получение информации об анимациях в файле"""
         data = self.load_pet_file(file_path)
         
+        """
         print("=== Метаданные ===")
         for key, value in data["metadata"].items():
             print(f"{key}: {value}")
@@ -146,7 +149,7 @@ class SimplePetLoader:
             print(f"  - Масштаб: {anim.get('scale', 1)}")
             print(f"  - Расположение: {anim['frames_layout'][0]}x{anim['frames_layout'][1]}")
             print(f"  - Размер данных: {len(anim['image_data'])} символов base64")
-        
+        """
         return data
 
 # Тестирование
