@@ -41,7 +41,7 @@ class SimplePetCompiler:
             img.save(img_bytes, format='PNG')
             image_data = img_bytes.getvalue()
             
-            # Кодируем в base64 для надежности
+            # Кодируем в base64
             image_data_b64 = base64.b64encode(image_data).decode('ascii')
             
             self.animations[name] = {
@@ -49,7 +49,7 @@ class SimplePetCompiler:
                 "frame_height": frame_height,
                 "frame_count": frame_count,
                 "scale": scale,
-                "image_data": image_data_b64,  # Теперь в base64
+                "image_data": image_data_b64,
                 "original_size": [width, height],
                 "frames_layout": [cols, rows]
             }
@@ -62,7 +62,7 @@ class SimplePetCompiler:
         # Подготавливаем структуру данных
         data_structure = {
             "metadata": self.metadata,
-            "animations": self.animations  # Теперь все данные в JSON
+            "animations": self.animations
         }
         
         # Сериализуем JSON
@@ -87,15 +87,16 @@ class SimplePetLoader:
         data = json.loads(content)
         return data
 
-    def load_spritesheet(self, image_data_b64, frame_width, frame_height, scale=1):
-        # Декодируем из base64
-        image_data = base64.b64decode(image_data_b64)
-        img_stream = io.BytesIO(image_data)
-        
-        sheet = pygame.image.load(img_stream).convert_alpha()
-        frames = []
+    def load_spritesheet(self, frame_width, frame_height, file_path=None, scale=1, image_data_b64=None):
 
-        # ТОЧНО ТАК ЖЕ КАК У ВАС
+        if image_data_b64 is not None:
+            # Декодируем из base64
+            image_data = base64.b64decode(image_data_b64)
+            img_stream = io.BytesIO(image_data)
+            sheet = pygame.image.load(img_stream).convert_alpha()
+        elif file_path is not None:
+            sheet = pygame.image.load(file_path).convert_alpha()
+        frames = []
         for y in range(0, sheet.get_height(), frame_height):
             for x in range(0, sheet.get_width(), frame_width):
                 frame = sheet.subsurface(pygame.Rect(x, y, frame_width, frame_height))
@@ -114,10 +115,10 @@ class SimplePetLoader:
         for name, anim_data in data["animations"].items():
             # Загружаем оригинальные кадры (вправо)
             frames_right = self.load_spritesheet(
-                anim_data["image_data"],  # base64 данные
-                anim_data["frame_width"], 
-                anim_data["frame_height"],
-                anim_data.get("scale", 1)
+                image_data_b64=anim_data["image_data"],
+                frame_width=anim_data["frame_width"], 
+                frame_height=anim_data["frame_height"],
+                scale=anim_data.get("scale", 1)
             )
             
             # Сохраняем в right

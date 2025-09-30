@@ -38,6 +38,7 @@ class PetManager:
         
         ctypes.windll.user32.SetLayeredWindowAttributes(self.hwnd, 0x00FFFFFF, 255, LWA_COLORKEY)
 
+        self.click_pos = None
         self.pets = []
         self.running = True
         self.show_debug = False
@@ -99,6 +100,34 @@ class PetManager:
             pet_menu = PetMenu(self)
             self.menu_window = pet_menu.root
 
+    def handle_selection(self, mouse_pos):
+        clicked_pet = None
+        
+        # Проверяем всех питомцев с конца (верхние слои)
+        for pet in reversed(self.pets):
+            if self.is_point_on_pet(mouse_pos, pet):
+                clicked_pet = pet
+                break
+        
+        # Обновляем состояние выделения
+        for pet in self.pets:
+            pet.is_selected = (pet == clicked_pet)
+    
+    def is_point_on_pet(self, point, pet):
+        """Проверяет, находится ли клик на питомце"""
+        if not hasattr(pet, 'animations_right') or pet.current_animation not in pet.animations_right:
+            return False
+            
+        # Получаем текущий кадр питомца
+        frames = pet.animations_right[pet.current_animation]
+        if not frames or pet.current_frame >= len(frames):
+            return False
+            
+        frame = frames[pet.current_frame]
+        pet_rect = frame.get_rect(topleft=(pet.x_pos, pet.y_pos))
+        
+        return pet_rect.collidepoint(point)
+
     def run(self):
         clock = pygame.time.Clock()
         while self.running:
@@ -106,6 +135,10 @@ class PetManager:
                 if event.type == pygame.QUIT:
                     self.running = False
                     break
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        self.click_pos = event.pos
+                        self.handle_selection(event.pos)
                     
             if not self.running:
                 break
@@ -122,25 +155,31 @@ class PetManager:
                 pet.draw(self.screen)
             
             # Рисуем debug информацию
-            self.draw_debug_info(screen=self.screen)
+            self.draw_debug_info(screen=self.screen, click_pos=self.click_pos)
             
             # Обновляем дисплей
             pygame.display.flip()
             clock.tick(60)
 
-    def draw_debug_info(self, screen):
+    def draw_debug_info(self, screen, click_pos):
         if not self.show_debug:
-            return
-            
+            return 
+
         debug_width, debug_height = 280, 200
         debug_surface = pygame.Surface((debug_width, debug_height), pygame.SRCALPHA)
         debug_surface.fill((0, 0, 0, 200))
         
+        for event in pygame.event.get():
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    click_pos = event.pos
+
         font = pygame.font.SysFont('Arial', 22)
         lines = [
             f"Is running: {self.running}",
             f"Pet count: {len(self.pets)}",
             f"Show debug: {self.show_debug}",
+            f"Clicked: {click_pos}",
             f"Menu open: {self.menu_show}",
             f"Frame: {pygame.time.get_ticks()}",
             "=== Debug Mode ==="
@@ -163,46 +202,37 @@ class DesktopPet:
         user32 = ctypes.windll.user32
         self.screen_width = user32.GetSystemMetrics(0)            # Ширина экрана
         self.screen_height = user32.GetSystemMetrics(1)           # Высота экрана 
-        self.running = True                                       # отображение питомца
-        self.current_frame = 0                                    # текущий кадр
-        self.last_update = pygame.time.get_ticks()                #
-        self.animation_speed = 0.4                                # скорость анимации
-        self.current_animation = 'idle'                           # текущая анимация
-        self.facing_right = True                                  #
-        self.x_pos, self.y_pos = self.get_random_coordinates()    # устанавливаем случайную стартовую позицию
-        self.wander_target = None                                 # целевая точка (x, y)
-        self.prev_target = None                                   #
-        self.wander_speed = 2                                     # скорость движения
-        self.last_wander_time = 0                                 # время последнего блуждания
+        self.running = True                                       # Отображение питомца
+        self.facing_right = True                                  # Направление питомца вправо
+        self.is_selected = False                                  # Статус выбора питомца
+        self.current_frame = 0                                    # Текущий кадр
+        self.last_update = pygame.time.get_ticks()                # 
+        self.animation_speed = 0.4                                # Скорость анимации
+        self.current_animation = 'idle'                           # Текущая анимация
+        self.x_pos, self.y_pos = self.get_random_coordinates()    # Устанавливаем случайную стартовую позицию
+        self.wander_target = None                                 # Целевая точка (x, y)
+        self.prev_target = None                                   # Предыдущая цель блуждания
+        self.wander_speed = 2                                     # Скорость движения
+        self.last_wander_time = 0                                 # Время последнего блуждания
+        self.ui = {}
 
         self.pet_loader = SimplePetLoader()
         try:
             self.animations_right, self.animations_left = self.pet_loader.load_all_animations(asset_file)
         except:
             self.animations_right, self.animations_left = self.pet_loader.load_all_animations("default.pet")
+        self.load_ui()
 
     def get_random_coordinates(self):
         return (random.randint(0, self.screen_width - 100), random.randint(0, self.screen_height - 100))
 
-    def load_all_animations(self):
-        self.animations_right = {}
-        self.animations_left = {}
-        
-        for name, data in self.animations_data.items():
-            # Загружаем оригинальные кадры (вправо)
-            frames_right = self.load_spritesheet(
-                data['filename'], 
-                data['size'][0], 
-                data['size'][1],
-                data.get('scale', 1)
-            )
-            
-            # Сохраняем в right
-            self.animations_right[name] = frames_right
-            
-            # Создаем отраженные кадры (влево)
-            frames_left = [pygame.transform.flip(frame, True, False) for frame in frames_right]
-            self.animations_left[name] = frames_left
+    def load_ui(self):
+        self.ui['selection'] = self.pet_loader.load_spritesheet(
+            frame_height=10,
+            frame_width=32,
+            scale=2,
+            file_path="Assets/UI/Selection_circle.png"
+        )
 
     def set_wander_target(self, target_x, target_y):
         self.wander_target = (target_x, target_y)
@@ -245,11 +275,16 @@ class DesktopPet:
 
     def draw(self, screen):
         """Отрисовывает питомца (вызывается каждый кадр)"""
+
+        selection_y_offset = 26 * 2
+
         if self.facing_right:
             frames = self.animations_right[self.current_animation]
         else:
             frames = self.animations_left[self.current_animation]
         screen.blit(frames[self.current_frame], (self.x_pos, self.y_pos))
+        if self.is_selected:
+            screen.blit(self.ui['selection'][0], (self.x_pos, self.y_pos + selection_y_offset))
 
 class PetMenu:
     def __init__(self, pet_manager):
@@ -566,5 +601,5 @@ class PetMenu:
         self.root.destroy()
     
 if __name__ == "__main__":
-    manager = PetManager()
-    manager.run()
+    game = PetManager()
+    game.run()
